@@ -26,7 +26,7 @@ export default function UploadScreen({
       <EnvironmentArt envId={prefs?.environment} customImage={prefs?.customImage} />
       <div className="flex-1 w-full max-w-lg mx-auto px-5 py-10 flex flex-col justify-center">
         <header className="mb-8">
-          <h1 className="text-2xl font-semibold tracking-tight">Yeezy</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">reeed</h1>
           <p className="mt-2 text-muted text-[15px] leading-relaxed">
             Turn any text-based PDF into a clean, card-by-card reading experience.
             Everything runs in your browser — nothing is uploaded.
