@@ -1,7 +1,7 @@
 import { ENVIRONMENT_IDS, DEFAULT_ENVIRONMENT } from "./environments.js";
 
-const PREFS_KEY = "reeedpdf:prefs";
-const POSITIONS_KEY = "reeedpdf:positions";
+const PREFS_KEY = "makereadinginterestingpdf:prefs";
+const POSITIONS_KEY = "makereadinginterestingpdf:positions";
 
 const FONT_SIZES = ["small", "medium", "large"];
 const SPACINGS = ["small", "medium", "large"];

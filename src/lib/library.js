@@ -1,4 +1,4 @@
-const DB_NAME = "reeed-library";
+const DB_NAME = "makereadinginteresting-library";
 const DB_VERSION = 1;
 const STORE_NAME = "docs";
 
