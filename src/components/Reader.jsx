@@ -16,7 +16,6 @@ import {
 const FONT_PX = { small: 16, medium: 18, large: 21 }
 const LINE_HEIGHT = { small: 1.5, medium: 1.7, large: 1.95 }
 const NAV_LOCK_MS = 420
-const TOUCH_THRESHOLD = 50
 
 export default function Reader({ doc, prefs, setPrefs, onBack, onPersist }) {
   const cards = useMemo(() => buildCards(doc.blocks), [doc.blocks])
@@ -35,7 +34,6 @@ export default function Reader({ doc, prefs, setPrefs, onBack, onPersist }) {
   const [pageInput, setPageInput] = useState('1')
 
   const navLockRef = useRef(false)
-  const touchStartYRef = useRef(null)
   const cardRef = useRef(null)
   const saveTimerRef = useRef(null)
   const elapsedRef = useRef(elapsedMs)
@@ -143,19 +141,6 @@ export default function Reader({ doc, prefs, setPrefs, onBack, onPersist }) {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [triggerNav, settingsOpen])
-
-  function onTouchStart(e) {
-    touchStartYRef.current = e.touches[0]?.clientY ?? null
-  }
-
-  function onTouchEnd(e) {
-    if (touchStartYRef.current == null) return
-    const endY = e.changedTouches[0]?.clientY ?? touchStartYRef.current
-    const dy = touchStartYRef.current - endY
-    touchStartYRef.current = null
-    if (Math.abs(dy) < TOUCH_THRESHOLD) return
-    triggerNav(dy > 0 ? 1 : -1)
-  }
 
   function onSelectionEnd() {
     const root = cardRef.current
@@ -267,11 +252,7 @@ export default function Reader({ doc, prefs, setPrefs, onBack, onPersist }) {
         </svg>
       </button>
 
-      <div
-        className="absolute inset-0 flex items-center justify-center px-4 pt-16 pb-6 sm:px-8"
-        onTouchStart={onTouchStart}
-        onTouchEnd={onTouchEnd}
-      >
+      <div className="absolute inset-0 flex items-center justify-center px-4 pt-16 pb-24 sm:px-8 sm:pb-28">
         <div className="relative h-full w-full max-w-3xl">
           {visibleCards.map(({ idx, r, blocks }) => (
             <div
@@ -279,7 +260,7 @@ export default function Reader({ doc, prefs, setPrefs, onBack, onPersist }) {
               ref={r === 0 ? cardRef : null}
               onMouseUp={r === 0 ? onSelectionEnd : undefined}
               aria-hidden={r !== 0}
-              className="acrylic absolute inset-0 rounded-2xl border border-line p-6 shadow-xl transition-all duration-[380ms] ease-out sm:p-10 overflow-auto max-h-[76vh]"
+              className="card-surface absolute inset-0 rounded-2xl border border-line p-6 shadow-xl transition-all duration-[380ms] ease-out sm:p-10 overflow-auto max-h-[76vh]"
               style={{
                 transform: cardTransform(r),
                 opacity: r === -1 ? 0 : r === 2 ? 0.65 : 1,
@@ -344,46 +325,48 @@ export default function Reader({ doc, prefs, setPrefs, onBack, onPersist }) {
         </div>
       </div>
 
-      <div className="w-100 acrylic fixed left-1/2 bottom-6 z-40 flex -translate-x-1/2 items-center justify-between gap-1.5 rounded-2xl border border-line p-2 shadow-sm sm:right-6">
-        <button
-          type="button"
-          onClick={() => triggerNav(-1)}
-          disabled={currentIndex === 0}
-          aria-label="Previous card"
-          className="rounded-full p-2 text-muted hover:text-ink hover:bg-line/60 transition-colors disabled:opacity-30 disabled:pointer-events-none"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5" aria-hidden="true">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 15.75 12 8.25l7.5 7.5" />
-          </svg>
-        </button>
+      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center px-4 pb-5 sm:pb-6">
+        <div className="acrylic pointer-events-auto flex items-center gap-1 rounded-full border border-line p-1.5 shadow-lg sm:gap-1.5 sm:p-2">
+          <button
+            type="button"
+            onClick={() => triggerNav(-1)}
+            disabled={currentIndex === 0}
+            aria-label="Previous card"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-muted hover:text-ink hover:bg-line/60 transition-colors disabled:opacity-30 disabled:pointer-events-none"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 15.75 12 8.25l7.5 7.5" />
+            </svg>
+          </button>
 
-        <div className="flex items-center gap-2 py-0.5">
-          <input
-            type="text"
-            inputMode="numeric"
-            value={pageInput}
-            onChange={(e) => setPageInput(e.target.value.replace(/[^0-9]/g, ''))}
-            onBlur={commitPageInput}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') e.currentTarget.blur()
-            }}
-            aria-label="Jump to card"
-            className="w-10 rounded-md border border-line bg-transparent py-0.5 text-center text-xs font-medium text-ink"
-          />
-          <span className="mt-0.5 text-[10px] leading-tight text-muted">/ {totalCards}</span>
+          <div className="flex shrink-0 items-center gap-1.5 px-1.5">
+            <input
+              type="text"
+              inputMode="numeric"
+              value={pageInput}
+              onChange={(e) => setPageInput(e.target.value.replace(/[^0-9]/g, ''))}
+              onBlur={commitPageInput}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') e.currentTarget.blur()
+              }}
+              aria-label="Jump to card"
+              className="w-10 rounded-md border border-line bg-transparent py-1 text-center text-xs font-medium text-ink"
+            />
+            <span className="text-xs leading-tight text-muted">/ {totalCards}</span>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => triggerNav(1)}
+            disabled={currentIndex === totalCards - 1}
+            aria-label="Next card"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-muted hover:text-ink hover:bg-line/60 transition-colors disabled:opacity-30 disabled:pointer-events-none"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 8.25 12 15.75l7.5-7.5" />
+            </svg>
+          </button>
         </div>
-
-        <button
-          type="button"
-          onClick={() => triggerNav(1)}
-          disabled={currentIndex === totalCards - 1}
-          aria-label="Next card"
-          className="rounded-full p-2 text-muted hover:text-ink hover:bg-line/60 transition-colors disabled:opacity-30 disabled:pointer-events-none"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5" aria-hidden="true">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 8.25 12 15.75l7.5-7.5" />
-          </svg>
-        </button>
       </div>
 
       {selection && (
