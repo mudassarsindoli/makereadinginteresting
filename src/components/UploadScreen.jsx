@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import EnvironmentArt from './EnvironmentArt.jsx'
 
 export default function UploadScreen({
   onFile,
@@ -6,6 +7,9 @@ export default function UploadScreen({
   progress,
   error,
   lastRead,
+  canResume,
+  onResume,
+  prefs,
 }) {
   const inputRef = useRef(null)
   const [dragging, setDragging] = useState(false)
@@ -18,12 +22,13 @@ export default function UploadScreen({
   }
 
   return (
-    <main className="min-h-dvh bg-surface text-ink flex flex-col">
+    <main className="min-h-dvh text-ink flex flex-col">
+      <EnvironmentArt envId={prefs?.environment} customImage={prefs?.customImage} />
       <div className="flex-1 w-full max-w-lg mx-auto px-5 py-10 flex flex-col justify-center">
         <header className="mb-8">
           <h1 className="text-2xl font-semibold tracking-tight">Yeezy</h1>
           <p className="mt-2 text-muted text-[15px] leading-relaxed">
-            Turn any text-based PDF into a clean, uninterrupted reading view.
+            Turn any text-based PDF into a clean, card-by-card reading experience.
             Everything runs in your browser — nothing is uploaded.
           </p>
         </header>
@@ -41,7 +46,7 @@ export default function UploadScreen({
         {loading ? (
           <section
             aria-live="polite"
-            className="rounded-2xl border border-line bg-surface px-6 py-10 text-center"
+            className="acrylic rounded-2xl border border-line px-6 py-10 text-center"
           >
             <div
               className="mx-auto mb-4 h-9 w-9 rounded-full border-2 border-line border-t-accent animate-spin"
@@ -82,11 +87,11 @@ export default function UploadScreen({
               if (file) onFile(file)
             }}
             aria-label="Choose a PDF file, or drop one here"
-            className={`w-full rounded-2xl border-2 border-dashed px-6 py-12 text-center transition-colors cursor-pointer
+            className={`acrylic w-full rounded-2xl border-2 border-dashed px-6 py-12 text-center transition-colors cursor-pointer
               ${
                 dragging
                   ? 'border-accent bg-accent/5'
-                  : 'border-line hover:border-accent/60 hover:bg-accent/[0.03]'
+                  : 'border-line hover:border-accent/60'
               }`}
           >
             <svg
@@ -118,8 +123,21 @@ export default function UploadScreen({
           tabIndex={-1}
         />
 
-        {lastRead && !loading && (
-          <section className="mt-6 rounded-2xl border border-line bg-surface px-4 py-4">
+        {canResume && !loading && (
+          <button
+            type="button"
+            onClick={onResume}
+            className="acrylic mt-6 w-full rounded-2xl border border-line px-4 py-4 text-left transition-colors hover:border-accent/60"
+          >
+            <p className="text-xs font-medium uppercase tracking-wide text-muted">
+              Continue reading
+            </p>
+            <p className="mt-1.5 text-sm font-medium truncate">Resume your last document</p>
+          </button>
+        )}
+
+        {!canResume && lastRead && !loading && (
+          <section className="acrylic mt-6 rounded-2xl border border-line px-4 py-4">
             <p className="text-xs font-medium uppercase tracking-wide text-muted">
               Last session
             </p>
@@ -137,7 +155,7 @@ export default function UploadScreen({
           <ul className="list-disc list-inside space-y-1">
             <li>Text-based PDFs only (no scanned images, no OCR)</li>
             <li>Headers, footers and page numbers are cleaned up automatically</li>
-            <li>Your reading position and preferences are saved on this device</li>
+            <li>Your reading position, highlights and the PDF itself stay on this device</li>
             <li>Designed & developed with ❤️ & AI by <a className='text-blue-600 font-bold underline' target='_blank' href="https://mudassar-sindoli.vercel.app/">mudassar.sindoli</a></li>
           </ul>
         </footer>

@@ -16,13 +16,27 @@ export function cleanupText(pages) {
       const pageBlocks = streamToBlocks(stream, page.medianSize)
       appendBlocks(blocks, pageBlocks)
     }
+    if (page.images && page.images.length) {
+      const sorted = [...page.images].sort((a, b) => a.yTop - b.yTop)
+      for (const img of sorted) {
+        blocks.push({
+          type: 'image',
+          blob: img.blob,
+          width: img.width,
+          height: img.height,
+        })
+      }
+    }
   }
 
   const finalBlocks = blocks
-    .map((b) => ({ ...b, text: b.text.replace(/\s+/g, ' ').trim() }))
-    .filter((b) => b.text.length > 1 || b.type === 'heading')
+    .map((b) =>
+      b.type === 'image' ? b : { ...b, text: b.text.replace(/\s+/g, ' ').trim() },
+    )
+    .filter((b) => b.type === 'image' || b.text.length > 1 || b.type === 'heading')
 
   const words = finalBlocks.reduce((sum, b) => {
+    if (b.type === 'image') return sum
     const w = b.text.split(' ').filter(Boolean).length
     return sum + w
   }, 0)

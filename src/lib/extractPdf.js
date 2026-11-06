@@ -1,7 +1,11 @@
 import * as pdfjsLib from 'pdfjs-dist'
+import { OPS, ImageKind } from 'pdfjs-dist'
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl
+
+const MAX_IMAGE_DIM = 1600
+const MIN_PLACED_SIZE = 28 // pt — skip tiny decorative marks/bullets
 
 export async function extractPdf(file, onProgress) {
   const buffer = await file.arrayBuffer()
@@ -17,7 +21,10 @@ export async function extractPdf(file, onProgress) {
       const page = await pdf.getPage(n)
       const viewport = page.getViewport({ scale: 1 })
       const content = await page.getTextContent()
-      pages.push(buildPage(n, content.items, viewport.width, viewport.height))
+      const images = await extractPageImages(page, viewport.width, viewport.height)
+      const built = buildPage(n, content.items, viewport.width, viewport.height)
+      built.images = images
+      pages.push(built)
       page.cleanup()
       onProgress?.(n, pdf.numPages)
       // Yield to the UI so the loading indicator stays responsive.
@@ -31,6 +38,179 @@ export async function extractPdf(file, onProgress) {
     }
   }
   return { pages, numPages: pdf.numPages }
+}
+
+/* ---------- images ---------- */
+
+async function extractPageImages(page, pageWidth, pageHeight) {
+  let opList
+  try {
+    opList = await page.getOperatorList()
+  } catch {
+    return []
+  }
+
+  const { fnArray, argsArray } = opList
+  let ctm = [1, 0, 0, 1, 0, 0]
+  const stack = []
+  const pending = []
+
+  for (let i = 0; i < fnArray.length; i++) {
+    const fn = fnArray[i]
+    if (fn === OPS.save) {
+      stack.push(ctm)
+    } else if (fn === OPS.restore) {
+      ctm = stack.pop() || ctm
+    } else if (fn === OPS.transform) {
+      ctm = multiplyMatrix(ctm, argsArray[i])
+    } else if (fn === OPS.paintImageXObject) {
+      const ctmAtCall = ctm
+      pending.push(
+        resolveImage(page, argsArray[i][0]).then((imgData) => ({ imgData, ctm: ctmAtCall })),
+      )
+    } else if (fn === OPS.paintInlineImageXObject) {
+      const imgData = argsArray[i][0]
+      if (imgData) pending.push(Promise.resolve({ imgData, ctm }))
+    }
+  }
+
+  if (!pending.length) return []
+  const resolved = await Promise.all(pending)
+  const images = []
+  for (const { imgData, ctm: m } of resolved) {
+    if (!imgData || !imgData.width || !imgData.height) continue
+    const corners = [
+      [0, 0],
+      [1, 0],
+      [0, 1],
+      [1, 1],
+    ].map(([x, y]) => applyMatrix(m, x, y))
+    const xs = corners.map((c) => c[0])
+    const ys = corners.map((c) => c[1])
+    const minX = Math.min(...xs)
+    const maxX = Math.max(...xs)
+    const minY = Math.min(...ys)
+    const maxY = Math.max(...ys)
+    const widthPt = maxX - minX
+    const heightPt = maxY - minY
+    if (widthPt < MIN_PLACED_SIZE || heightPt < MIN_PLACED_SIZE) continue
+    let blob = null
+    try {
+      blob = await imageDataToBlob(imgData)
+    } catch {
+      blob = null
+    }
+    if (!blob) continue
+    images.push({
+      blob,
+      width: imgData.width,
+      height: imgData.height,
+      yTop: pageHeight - maxY,
+      xStart: minX,
+    })
+  }
+  return images
+}
+
+function resolveImage(page, objId) {
+  return new Promise((resolve) => {
+    try {
+      page.objs.get(objId, resolve)
+    } catch {
+      resolve(null)
+    }
+  })
+}
+
+function multiplyMatrix(outer, inner) {
+  return [
+    outer[0] * inner[0] + outer[2] * inner[1],
+    outer[1] * inner[0] + outer[3] * inner[1],
+    outer[0] * inner[2] + outer[2] * inner[3],
+    outer[1] * inner[2] + outer[3] * inner[3],
+    outer[0] * inner[4] + outer[2] * inner[5] + outer[4],
+    outer[1] * inner[4] + outer[3] * inner[5] + outer[5],
+  ]
+}
+
+function applyMatrix(m, x, y) {
+  return [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]]
+}
+
+async function imageDataToBlob(imgData) {
+  const srcWidth = imgData.width
+  const srcHeight = imgData.height
+
+  const srcCanvas = document.createElement('canvas')
+  srcCanvas.width = srcWidth
+  srcCanvas.height = srcHeight
+  const srcCtx = srcCanvas.getContext('2d')
+  if (!srcCtx) return null
+
+  if (imgData.bitmap) {
+    srcCtx.drawImage(imgData.bitmap, 0, 0)
+  } else if (typeof ImageData !== 'undefined' && imgData instanceof ImageData) {
+    srcCtx.putImageData(imgData, 0, 0)
+  } else if (imgData.data && imgData.kind != null) {
+    putBinaryImageData(srcCtx, imgData)
+  } else {
+    return null
+  }
+
+  const scale = Math.min(1, MAX_IMAGE_DIM / Math.max(srcWidth, srcHeight))
+  let finalCanvas = srcCanvas
+  if (scale < 1) {
+    const outWidth = Math.max(1, Math.round(srcWidth * scale))
+    const outHeight = Math.max(1, Math.round(srcHeight * scale))
+    finalCanvas = document.createElement('canvas')
+    finalCanvas.width = outWidth
+    finalCanvas.height = outHeight
+    finalCanvas.getContext('2d').drawImage(srcCanvas, 0, 0, outWidth, outHeight)
+  }
+
+  return new Promise((resolve) => {
+    finalCanvas.toBlob((blob) => resolve(blob), 'image/png')
+  })
+}
+
+function putBinaryImageData(ctx, imgData) {
+  const { width, height, data, kind } = imgData
+  const out = ctx.createImageData(width, height)
+  const dest = out.data
+  if (kind === ImageKind.RGBA_32BPP) {
+    dest.set(data.subarray(0, dest.length))
+  } else if (kind === ImageKind.RGB_24BPP) {
+    let s = 0
+    for (let d = 0; d < dest.length; d += 4) {
+      dest[d] = data[s++]
+      dest[d + 1] = data[s++]
+      dest[d + 2] = data[s++]
+      dest[d + 3] = 255
+    }
+  } else if (kind === ImageKind.GRAYSCALE_1BPP) {
+    const rowBytes = (width + 7) >> 3
+    let destPos = 0
+    for (let y = 0; y < height; y++) {
+      let srcPos = y * rowBytes
+      let mask = 0
+      let byte = 0
+      for (let x = 0; x < width; x++) {
+        if (mask === 0) {
+          byte = data[srcPos++]
+          mask = 128
+        }
+        const value = byte & mask ? 255 : 0
+        dest[destPos++] = value
+        dest[destPos++] = value
+        dest[destPos++] = value
+        dest[destPos++] = 255
+        mask >>= 1
+      }
+    }
+  } else {
+    throw new Error(`Unsupported image kind: ${kind}`)
+  }
+  ctx.putImageData(out, 0, 0)
 }
 
 function buildPage(num, items, width, height) {
