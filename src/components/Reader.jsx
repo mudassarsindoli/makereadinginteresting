@@ -19,6 +19,7 @@ const NAV_LOCK_MS = 420
 
 export default function Reader({ doc, prefs, setPrefs, onBack, onPersist }) {
   const cards = useMemo(() => buildCards(doc.blocks), [doc.blocks])
+
   const totalCards = cards.length
 
   const [currentIndex, setCurrentIndex] = useState(() => {

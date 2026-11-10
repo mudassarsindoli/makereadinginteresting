@@ -33,7 +33,12 @@ export function cleanupText(pages) {
     .map((b) =>
       b.type === 'image' ? b : { ...b, text: b.text.replace(/\s+/g, ' ').trim() },
     )
-    .filter((b) => b.type === 'image' || b.text.length > 1 || b.type === 'heading')
+    .filter(
+      (b) =>
+        b.type === 'image' ||
+        b.type === 'heading' ||
+        (b.text.length > 1 && !isNoiseParagraph(b.text)),
+    )
 
   const words = finalBlocks.reduce((sum, b) => {
     if (b.type === 'image') return sum
@@ -50,6 +55,19 @@ export function cleanupText(pages) {
       words,
     },
   }
+}
+
+/* ---------- stray fragments ---------- */
+
+// Catches leftover scraps that aren't real body text: bare page/figure
+// numbers, lone bullet glyphs, rule lines, and single-letter fragments.
+function isNoiseParagraph(text) {
+  if (/^[\d\s.,;:()[\]\-–—]+$/.test(text)) return true
+  if (/^[•·*\-–—_=~|]{1,6}$/.test(text)) return true
+  const words = text.split(/\s+/).filter(Boolean)
+  if (words.length === 1 && text.length <= 3) return true
+  if (/^(fig(ure)?|tab(le)?)\.?\s*\d+[.:]?$/i.test(text)) return true
+  return false
 }
 
 /* ---------- headers / footers / page numbers ---------- */
