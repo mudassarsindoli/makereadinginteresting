@@ -70,7 +70,6 @@ export default function App() {
         numPages,
         stats,
         highlights: [],
-        readingMs: 0,
       }
       await saveCurrentDoc(newDoc)
       setDoc(newDoc)

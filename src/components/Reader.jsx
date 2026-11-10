@@ -8,7 +8,6 @@ import {
   normalizeHighlights,
   pieceSegments,
   selectionToRanges,
-  formatReadingTime,
   googleSearchUrl,
   makeHighlightId,
 } from '../lib/highlight.js'
@@ -30,14 +29,12 @@ export default function Reader({ doc, prefs, setPrefs, onBack, onPersist }) {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [highlights, setHighlights] = useState(() => normalizeHighlights(doc.highlights))
   const [selection, setSelection] = useState(null)
-  const [elapsedMs, setElapsedMs] = useState(doc.readingMs || 0)
   const [lightboxSrc, setLightboxSrc] = useState(null)
   const [pageInput, setPageInput] = useState('1')
 
   const navLockRef = useRef(false)
   const cardRef = useRef(null)
   const saveTimerRef = useRef(null)
-  const elapsedRef = useRef(elapsedMs)
   const highlightsInitRef = useRef(true)
   const imageUrlsRef = useRef(new Map())
 
@@ -98,26 +95,6 @@ export default function Reader({ doc, prefs, setPrefs, onBack, onPersist }) {
     }, 300)
     return () => clearTimeout(saveTimerRef.current)
   }, [currentIndex, doc.key, doc.name, totalCards])
-
-  // Reading timer: ticks every second while the tab is visible.
-  useEffect(() => {
-    const tick = setInterval(() => {
-      if (document.hidden) return
-      elapsedRef.current += 1000
-      setElapsedMs(elapsedRef.current)
-    }, 1000)
-    return () => clearInterval(tick)
-  }, [])
-
-  useEffect(() => {
-    const persistTick = setInterval(() => {
-      onPersist({ readingMs: elapsedRef.current })
-    }, 5000)
-    return () => {
-      clearInterval(persistTick)
-      onPersist({ readingMs: elapsedRef.current })
-    }
-  }, [onPersist])
 
   // Persist highlights whenever they change (skip the initial mount).
   useEffect(() => {
@@ -234,7 +211,7 @@ export default function Reader({ doc, prefs, setPrefs, onBack, onPersist }) {
               {doc.name}
             </p>
             <p className="text-xs text-muted leading-tight">
-              {percent}% read · card {currentIndex + 1}/{totalCards} · {formatReadingTime(elapsedMs)}
+              {percent}% read · card {currentIndex + 1}/{totalCards}
             </p>
           </div>
         </div>

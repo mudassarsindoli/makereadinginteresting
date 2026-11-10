@@ -312,19 +312,6 @@ function groupSlices(slices) {
   return result
 }
 
-export function formatReadingTime(ms) {
-  if (!Number.isFinite(ms) || ms <= 0) return '0:00'
-  const totalSeconds = Math.floor(ms / 1000)
-  const hours = Math.floor(totalSeconds / 3600)
-  const minutes = Math.floor((totalSeconds % 3600) / 60)
-  const seconds = totalSeconds % 60
-  const paddedSeconds = String(seconds).padStart(2, '0')
-  if (hours > 0) {
-    return `${hours}:${String(minutes).padStart(2, '0')}:${paddedSeconds}`
-  }
-  return `${minutes}:${paddedSeconds}`
-}
-
 export function googleSearchUrl(text) {
   const query = typeof text === 'string' ? text.trim().slice(0, 500) : ''
   if (!query) return 'https://www.google.com/search'

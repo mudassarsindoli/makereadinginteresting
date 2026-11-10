@@ -1,8 +1,15 @@
 import * as pdfjsLib from 'pdfjs-dist'
 import { OPS, ImageKind } from 'pdfjs-dist'
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
+import openjpegWasmUrl from 'pdfjs-dist/wasm/openjpeg.wasm?url'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl
+
+// Without this, pdf.js can't find the OpenJPEG wasm decoder and silently
+// falls back to a far slower pure-JS JPEG2000 decoder for every such image
+// ("JpxError: OpenJPEG failed to initialize" in the console) — on an
+// image-heavy PDF that looks like the import has hung.
+const WASM_BASE_URL = openjpegWasmUrl.slice(0, openjpegWasmUrl.lastIndexOf('/') + 1)
 
 const MAX_IMAGE_DIM = 1600
 const MIN_PLACED_SIZE = 28 // pt — skip tiny decorative marks/bullets
@@ -13,6 +20,7 @@ export async function extractPdf(file, onProgress) {
     data: new Uint8Array(buffer),
     isEvalSupported: false,
     disableFontFace: true,
+    wasmUrl: WASM_BASE_URL,
   })
   const pdf = await task.promise
   const pages = []
@@ -20,7 +28,9 @@ export async function extractPdf(file, onProgress) {
     for (let n = 1; n <= pdf.numPages; n++) {
       const page = await pdf.getPage(n)
       const viewport = page.getViewport({ scale: 1 })
-      const content = await page.getTextContent()
+      const content = await withTimeout(page.getTextContent(), 15000).catch(() => ({
+        items: [],
+      }))
       const images = await extractPageImages(page, viewport.width, viewport.height)
       const built = buildPage(n, content.items, viewport.width, viewport.height)
       built.images = images
@@ -45,7 +55,7 @@ export async function extractPdf(file, onProgress) {
 async function extractPageImages(page, pageWidth, pageHeight) {
   let opList
   try {
-    opList = await page.getOperatorList()
+    opList = await withTimeout(page.getOperatorList(), 15000)
   } catch {
     return []
   }
@@ -114,11 +124,36 @@ async function extractPageImages(page, pageWidth, pageHeight) {
 
 function resolveImage(page, objId) {
   return new Promise((resolve) => {
-    try {
-      page.objs.get(objId, resolve)
-    } catch {
-      resolve(null)
+    let settled = false
+    const done = (value) => {
+      if (settled) return
+      settled = true
+      resolve(value)
     }
+    try {
+      page.objs.get(objId, done)
+    } catch {
+      done(null)
+    }
+    // Some malformed/unsupported image streams never resolve — don't let
+    // one bad image stall the whole import.
+    setTimeout(() => done(null), 5000)
+  })
+}
+
+function withTimeout(promise, ms) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('timeout')), ms)
+    promise.then(
+      (value) => {
+        clearTimeout(timer)
+        resolve(value)
+      },
+      (err) => {
+        clearTimeout(timer)
+        reject(err)
+      },
+    )
   })
 }
 

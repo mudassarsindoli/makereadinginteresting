@@ -1,5 +1,5 @@
-import { useRef, useState } from 'react'
-import EnvironmentArt from './EnvironmentArt.jsx'
+import { useRef, useState } from "react";
+import EnvironmentArt from "./EnvironmentArt.jsx";
 
 export default function UploadScreen({
   onFile,
@@ -11,29 +11,43 @@ export default function UploadScreen({
   onResume,
   prefs,
 }) {
-  const inputRef = useRef(null)
-  const [dragging, setDragging] = useState(false)
-  const loading = status === 'loading'
+  const inputRef = useRef(null);
+  const [dragging, setDragging] = useState(false);
+  const loading = status === "loading";
 
   function onSelect(e) {
-    const file = e.target.files?.[0]
-    if (file) onFile(file)
-    e.target.value = ''
+    const file = e.target.files?.[0];
+    if (file) onFile(file);
+    e.target.value = "";
   }
 
   return (
     <main className="min-h-dvh text-ink flex flex-col">
-      <EnvironmentArt envId={prefs?.environment} customImage={prefs?.customImage} />
+      <EnvironmentArt
+        envId={prefs?.environment}
+        customImage={prefs?.customImage}
+      />
 
       <div className="flex-1 w-full flex items-center justify-center gap-12 px-6 py-10 lg:gap-20 lg:px-16 xl:gap-28">
         <ReadingArt className="hidden lg:block" />
 
         <div className="w-full max-w-md shrink-0">
           <header className="mb-7 text-center">
-            <h1 className="text-2xl font-semibold tracking-tight">makereadinginteresting</h1>
-            <p className="mt-1.5 text-muted text-sm">
-              Drop in a PDF. Read it like a deck of cards.
-            </p>
+            <h1 className="text-2xl font-semibold my-4 tracking-tight">
+              makereadinginteresting
+            </h1>
+            <div class="space-y-3">
+              <p class="max-w-xl text-base leading-relaxed">
+                Welcome, Reader! 👋 Love reading but find PDFs on your phone a
+                little frustrating? You're in the right place. Enjoy a cleaner,
+                calmer, and more comfortable reading experience designed to make
+                every page a pleasure.
+              </p>
+
+              <p class="text-sm font-medium text-indigo-600 dark:text-indigo-400">
+                Made for readers. Perfect for text-based PDFs.
+              </p>
+            </div>
           </header>
 
           {error && (
@@ -55,7 +69,9 @@ export default function UploadScreen({
                 className="mx-auto mb-4 h-9 w-9 rounded-full border-2 border-line border-t-accent animate-spin"
                 aria-hidden="true"
               />
-              <p className="text-sm font-medium">{progress.stage || 'Working'}</p>
+              <p className="text-sm font-medium">
+                {progress.stage || "Working"}
+              </p>
               {progress.total > 0 ? (
                 <>
                   <p className="mt-1 text-sm text-muted">
@@ -71,7 +87,9 @@ export default function UploadScreen({
                   </div>
                 </>
               ) : (
-                <p className="mt-1 text-sm text-muted">This can take a moment…</p>
+                <p className="mt-1 text-sm text-muted">
+                  This can take a moment…
+                </p>
               )}
             </section>
           ) : (
@@ -79,22 +97,22 @@ export default function UploadScreen({
               type="button"
               onClick={() => inputRef.current?.click()}
               onDragOver={(e) => {
-                e.preventDefault()
-                setDragging(true)
+                e.preventDefault();
+                setDragging(true);
               }}
               onDragLeave={() => setDragging(false)}
               onDrop={(e) => {
-                e.preventDefault()
-                setDragging(false)
-                const file = e.dataTransfer.files?.[0]
-                if (file) onFile(file)
+                e.preventDefault();
+                setDragging(false);
+                const file = e.dataTransfer.files?.[0];
+                if (file) onFile(file);
               }}
               aria-label="Choose a PDF file, or drop one here"
               className={`acrylic w-full rounded-2xl border-2 border-dashed px-6 py-12 text-center transition-colors cursor-pointer
                 ${
                   dragging
-                    ? 'border-accent bg-accent/5'
-                    : 'border-line hover:border-accent/60'
+                    ? "border-accent bg-accent/5"
+                    : "border-line hover:border-accent/60"
                 }`}
             >
               <svg
@@ -114,7 +132,9 @@ export default function UploadScreen({
               <span className="mt-3 block text-[15px] font-medium">
                 Tap to choose a PDF
               </span>
-              <span className="mt-1 block text-sm text-muted">or drop one here</span>
+              <span className="mt-1 block text-sm text-muted">
+                or drop one here
+              </span>
             </button>
           )}
           <input
@@ -135,7 +155,9 @@ export default function UploadScreen({
               <p className="text-xs font-medium uppercase tracking-wide text-muted">
                 Continue reading
               </p>
-              <p className="mt-1.5 text-sm font-medium truncate">Resume your last document</p>
+              <p className="mt-1.5 text-sm font-medium truncate">
+                Resume your last document
+              </p>
             </button>
           )}
 
@@ -148,8 +170,8 @@ export default function UploadScreen({
                 {lastRead.name}
               </p>
               <p className="mt-0.5 text-sm text-muted">
-                {Math.round((lastRead.progress || 0) * 100)}% read — choose the same file
-                again to pick up where you left off.
+                {Math.round((lastRead.progress || 0) * 100)}% read — choose the
+                same file again to pick up where you left off.
               </p>
             </section>
           )}
@@ -163,7 +185,7 @@ export default function UploadScreen({
       </div>
 
       <footer className="pb-5 text-center text-[11px] text-muted">
-        Designed &amp; developed with ❤️ &amp; AI by{' '}
+        Designed &amp; developed with ❤️ &amp; AI by{" "}
         <a
           className="font-medium text-accent underline underline-offset-2"
           target="_blank"
@@ -174,13 +196,16 @@ export default function UploadScreen({
         </a>
       </footer>
     </main>
-  )
+  );
 }
 
-function ReadingArt({ className = '', mirrored = false }) {
-  const sign = mirrored ? -1 : 1
+function ReadingArt({ className = "", mirrored = false }) {
+  const sign = mirrored ? -1 : 1;
   return (
-    <div className={`relative h-80 w-60 shrink-0 ${className}`} aria-hidden="true">
+    <div
+      className={`relative h-80 w-60 shrink-0 ${className}`}
+      aria-hidden="true"
+    >
       <div
         className="absolute left-2 top-8 h-40 w-36 rounded-[32px] bg-accent/20 blur-3xl"
         style={{ transform: `translateX(${sign * 12}px)` }}
@@ -212,10 +237,20 @@ function ReadingArt({ className = '', mirrored = false }) {
         className="acrylic absolute -bottom-2 right-0 flex h-12 w-12 items-center justify-center rounded-full border border-line shadow-lg"
         style={{ transform: `rotate(${sign * 8}deg)` }}
       >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5 text-accent">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.5v11M6.5 12h11" />
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          className="h-5 w-5 text-accent"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M12 6.5v11M6.5 12h11"
+          />
         </svg>
       </div>
     </div>
-  )
+  );
 }
