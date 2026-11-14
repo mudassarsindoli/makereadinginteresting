@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import SettingsPanel from './SettingsPanel.jsx'
 import EnvironmentArt from './EnvironmentArt.jsx'
 import ImageLightbox from './ImageLightbox.jsx'
@@ -15,6 +15,7 @@ import {
 const FONT_PX = { small: 16, medium: 18, large: 21 }
 const LINE_HEIGHT = { small: 1.5, medium: 1.7, large: 1.95 }
 const NAV_LOCK_MS = 420
+const OVERSCAN = 2
 
 export default function Reader({ doc, prefs, setPrefs, onBack, onPersist }) {
   const cards = useMemo(() => buildCards(doc.blocks), [doc.blocks])
@@ -33,10 +34,16 @@ export default function Reader({ doc, prefs, setPrefs, onBack, onPersist }) {
   const [pageInput, setPageInput] = useState('1')
 
   const navLockRef = useRef(false)
-  const cardRef = useRef(null)
+  const scrollRef = useRef(null)
+  const scrollRafRef = useRef(null)
+  const currentIndexRef = useRef(currentIndex)
   const saveTimerRef = useRef(null)
   const highlightsInitRef = useRef(true)
   const imageUrlsRef = useRef(new Map())
+
+  useEffect(() => {
+    currentIndexRef.current = currentIndex
+  }, [currentIndex])
 
   const imageUrl = useCallback((block) => {
     if (!block.blob) return ''
@@ -56,23 +63,64 @@ export default function Reader({ doc, prefs, setPrefs, onBack, onPersist }) {
     }
   }, [doc.key])
 
-  const triggerNav = useCallback(
-    (dir) => {
-      if (navLockRef.current) return
-      setCurrentIndex((i) => {
-        const next = Math.max(0, Math.min(totalCards - 1, i + dir))
-        if (next !== i) {
-          navLockRef.current = true
-          setTimeout(() => {
-            navLockRef.current = false
-          }, NAV_LOCK_MS)
-        }
-        return next
-      })
-      setSelection(null)
+  // Jump the scroll-snap feed to a given card. The scroll handler below
+  // keeps `currentIndex` in sync once the browser settles on it.
+  const scrollToIndex = useCallback(
+    (idx, instant = false) => {
+      const el = scrollRef.current
+      if (!el) return
+      const clamped = Math.max(0, Math.min(totalCards - 1, idx))
+      el.scrollTo({ top: clamped * el.clientHeight, behavior: instant ? 'auto' : 'smooth' })
     },
     [totalCards],
   )
+
+  const triggerNav = useCallback(
+    (dir) => {
+      if (navLockRef.current) return
+      navLockRef.current = true
+      setTimeout(() => {
+        navLockRef.current = false
+      }, NAV_LOCK_MS)
+      scrollToIndex(currentIndexRef.current + dir)
+      setSelection(null)
+    },
+    [scrollToIndex],
+  )
+
+  // Restore the saved scroll position instantly on mount (no animation,
+  // no flash of card 0 before the jump).
+  useLayoutEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    el.scrollTop = currentIndexRef.current * el.clientHeight
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [doc.key])
+
+  // Keep the active card aligned with the viewport across resizes
+  // (e.g. mobile browser chrome showing/hiding, orientation change).
+  useEffect(() => {
+    function onResize() {
+      scrollToIndex(currentIndexRef.current, true)
+    }
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [scrollToIndex])
+
+  // Derive the active card from scroll position — this is what makes wheel
+  // scroll (desktop) and touch swipe (mobile) both "just work" via native
+  // CSS scroll-snap, Instagram-Reels style.
+  const handleScroll = useCallback(() => {
+    if (scrollRafRef.current) return
+    scrollRafRef.current = requestAnimationFrame(() => {
+      scrollRafRef.current = null
+      const el = scrollRef.current
+      if (!el) return
+      const h = el.clientHeight || 1
+      const idx = Math.max(0, Math.min(totalCards - 1, Math.round(el.scrollTop / h)))
+      setCurrentIndex((prev) => (prev === idx ? prev : idx))
+    })
+  }, [totalCards])
 
   useEffect(() => {
     setPageInput(String(currentIndex + 1))
@@ -81,7 +129,7 @@ export default function Reader({ doc, prefs, setPrefs, onBack, onPersist }) {
   function commitPageInput() {
     const n = parseInt(pageInput, 10)
     if (Number.isFinite(n)) {
-      setCurrentIndex(Math.max(0, Math.min(totalCards - 1, n - 1)))
+      scrollToIndex(n - 1)
     } else {
       setPageInput(String(currentIndex + 1))
     }
@@ -121,7 +169,7 @@ export default function Reader({ doc, prefs, setPrefs, onBack, onPersist }) {
   }, [triggerNav, settingsOpen])
 
   function onSelectionEnd() {
-    const root = cardRef.current
+    const root = scrollRef.current
     if (!root) return
     const ranges = selectionToRanges(root)
     if (!ranges.length) {
@@ -170,12 +218,11 @@ export default function Reader({ doc, prefs, setPrefs, onBack, onPersist }) {
   const fontSize = FONT_PX[prefs.fontSize] || FONT_PX.medium
   const lineHeight = LINE_HEIGHT[prefs.spacing] || LINE_HEIGHT.medium
 
-  const visibleCards = []
-  for (let r = -1; r <= 2; r++) {
-    const idx = currentIndex + r
-    if (idx < 0 || idx >= totalCards) continue
-    visibleCards.push({ idx, r, blocks: cards[idx] })
-  }
+  // Only hydrate cards near the active one with real content — the rest
+  // render as empty placeholders so the feed still scrolls/snaps correctly
+  // across documents with thousands of cards.
+  const windowStart = Math.max(0, currentIndex - OVERSCAN)
+  const windowEnd = Math.min(totalCards - 1, currentIndex + OVERSCAN)
 
   return (
     <div className="fixed inset-0 overflow-hidden text-ink">
@@ -230,77 +277,80 @@ export default function Reader({ doc, prefs, setPrefs, onBack, onPersist }) {
         </svg>
       </button>
 
-      <div className="absolute inset-0 flex items-center justify-center px-4 pt-16 pb-24 sm:px-8 sm:pb-28">
-        <div className="relative h-full w-full max-w-3xl">
-          {visibleCards.map(({ idx, r, blocks }) => (
-            <div
+      <div
+        ref={scrollRef}
+        onScroll={handleScroll}
+        onMouseUp={onSelectionEnd}
+        className="reel-scroll absolute inset-0 touch-pan-y snap-y snap-mandatory overflow-y-auto overscroll-y-contain"
+      >
+        {Array.from({ length: totalCards }, (_, idx) => {
+          if (idx < windowStart || idx > windowEnd) {
+            return <section key={idx} className="h-full w-full snap-start snap-always" />
+          }
+          const blocks = cards[idx]
+          return (
+            <section
               key={idx}
-              ref={r === 0 ? cardRef : null}
-              onMouseUp={r === 0 ? onSelectionEnd : undefined}
-              aria-hidden={r !== 0}
-              className="card-surface absolute inset-0 rounded-2xl border border-line p-6 shadow-xl transition-all duration-[380ms] ease-out sm:p-10 overflow-auto max-h-[76vh]"
-              style={{
-                transform: cardTransform(r),
-                opacity: r === -1 ? 0 : r === 2 ? 0.65 : 1,
-                zIndex: 40 - r * 10,
-                pointerEvents: r === 0 ? 'auto' : 'none',
-                fontSize: `${fontSize}px`,
-                lineHeight,
-              }}
+              className="relative flex h-full w-full snap-start snap-always items-center justify-center px-4 pt-16 pb-24 sm:px-8 sm:pb-28"
             >
-              {blocks.map((block) =>
-                block.type === 'image' ? (
-                  <div key={block.blockIndex} className="my-4 flex justify-center">
-                    <img
-                      src={imageUrl(block)}
-                      alt=""
-                      loading="lazy"
-                      onClick={() => setLightboxSrc(imageUrl(block))}
-                      className="max-h-72 w-auto cursor-zoom-in rounded-lg border border-line object-contain shadow-sm transition-transform hover:scale-[1.01]"
-                    />
-                  </div>
-                ) : block.type === 'heading' ? (
-                  block.level === 2 ? (
-                    <h2
-                      key={block.blockIndex}
-                      data-block-index={block.blockIndex}
-                      data-source-start="0"
-                      className="mb-4 mt-2 font-semibold tracking-tight first:mt-0"
-                      style={{ fontSize: '1.4em', lineHeight: 1.25 }}
-                    >
-                      {renderBlockText(block, highlights, removeHighlight)}
-                    </h2>
+              <div
+                className="card-surface relative h-full w-full max-w-3xl overflow-auto overscroll-contain rounded-2xl border border-line p-6 shadow-xl sm:p-10"
+                style={{ fontSize: `${fontSize}px`, lineHeight }}
+              >
+                {blocks.map((block) =>
+                  block.type === 'image' ? (
+                    <div key={block.blockIndex} className="my-4 flex justify-center">
+                      <img
+                        src={imageUrl(block)}
+                        alt=""
+                        loading="lazy"
+                        onClick={() => setLightboxSrc(imageUrl(block))}
+                        className="max-h-72 w-auto cursor-zoom-in rounded-lg border border-line object-contain shadow-sm transition-transform hover:scale-[1.01]"
+                      />
+                    </div>
+                  ) : block.type === 'heading' ? (
+                    block.level === 2 ? (
+                      <h2
+                        key={block.blockIndex}
+                        data-block-index={block.blockIndex}
+                        data-source-start="0"
+                        className="mb-4 mt-2 font-semibold tracking-tight first:mt-0"
+                        style={{ fontSize: '1.4em', lineHeight: 1.25 }}
+                      >
+                        {renderBlockText(block, highlights, removeHighlight)}
+                      </h2>
+                    ) : (
+                      <h3
+                        key={block.blockIndex}
+                        data-block-index={block.blockIndex}
+                        data-source-start="0"
+                        className="mb-3 mt-2 font-semibold tracking-tight first:mt-0"
+                        style={{ fontSize: '1.15em', lineHeight: 1.3 }}
+                      >
+                        {renderBlockText(block, highlights, removeHighlight)}
+                      </h3>
+                    )
                   ) : (
-                    <h3
+                    <p
                       key={block.blockIndex}
                       data-block-index={block.blockIndex}
                       data-source-start="0"
-                      className="mb-3 mt-2 font-semibold tracking-tight first:mt-0"
-                      style={{ fontSize: '1.15em', lineHeight: 1.3 }}
+                      className="mb-[0.9em] hyphens-auto text-pretty"
+                      lang="en"
                     >
                       {renderBlockText(block, highlights, removeHighlight)}
-                    </h3>
-                  )
-                ) : (
-                  <p
-                    key={block.blockIndex}
-                    data-block-index={block.blockIndex}
-                    data-source-start="0"
-                    className="mb-[0.9em] hyphens-auto text-pretty"
-                    lang="en"
-                  >
-                    {renderBlockText(block, highlights, removeHighlight)}
+                    </p>
+                  ),
+                )}
+                {idx === totalCards - 1 && (
+                  <p className="mt-10 text-center text-sm text-muted">
+                    End — {doc.stats.words.toLocaleString()} words from {doc.stats.pagesRead} pages
                   </p>
-                ),
-              )}
-              {idx === totalCards - 1 && (
-                <p className="mt-10 text-center text-sm text-muted">
-                  End — {doc.stats.words.toLocaleString()} words from {doc.stats.pagesRead} pages
-                </p>
-              )}
-            </div>
-          ))}
-        </div>
+                )}
+              </div>
+            </section>
+          )
+        })}
       </div>
 
       <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center px-4 pb-5 sm:pb-6">
@@ -381,13 +431,6 @@ export default function Reader({ doc, prefs, setPrefs, onBack, onPersist }) {
       )}
     </div>
   )
-}
-
-function cardTransform(r) {
-  if (r === -1) return 'translateY(-32px) scale(1)'
-  if (r === 0) return 'translateY(0) scale(1)'
-  if (r === 1) return 'translateY(22px) scale(0.955)'
-  return 'translateY(40px) scale(0.91)'
 }
 
 function selectionToolbarStyle(rect) {

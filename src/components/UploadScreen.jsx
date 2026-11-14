@@ -183,18 +183,6 @@ export default function UploadScreen({
 
         <ReadingArt className="hidden lg:block" mirrored />
       </div>
-
-      <footer className="pb-5 text-center text-[11px] text-muted">
-        Designed &amp; developed with ❤️ &amp; AI by{" "}
-        <a
-          className="font-medium text-accent underline underline-offset-2"
-          target="_blank"
-          rel="noreferrer"
-          href="https://mudassar-sindoli.vercel.app/"
-        >
-          mudassar.sindoli
-        </a>
-      </footer>
     </main>
   );
 }
